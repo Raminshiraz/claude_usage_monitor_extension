@@ -1,6 +1,6 @@
 # Claude Usage Monitor — Browser Extension
 
-A minimal browser extension that shows your Claude.ai usage limits at a glance — session window, weekly caps per model, and extra usage spending — all using your existing browser session.
+A minimal browser extension that shows your Claude.ai usage limits at a glance — session window, weekly caps per model — all using your existing browser session.
 
 ![Claude Usage Monitor](screenshot.png)
 
