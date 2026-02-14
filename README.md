@@ -1,4 +1,4 @@
-# Claude Usage Monitor — Chrome Extension
+# Claude Usage Monitor — Browser Extension
 
 A minimal Chrome extension that shows your Claude.ai usage limits at a glance — session window, weekly caps per model, and extra usage spending — all using your existing browser session.
 
