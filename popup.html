@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=360">
+<title>Claude Usage</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --accent: #D97757;
+    --accent-light: #E8956F;
+    --accent-dim: rgba(217,119,87,0.15);
+  }
+
+  [data-theme="dark"] {
+    --bg: #1a1714;
+    --bg-card: #241f1b;
+    --bg-card-hover: #2c2622;
+    --border: rgba(217,119,87,0.1);
+    --text-primary: #f0e8e0;
+    --text-secondary: #a89888;
+    --text-muted: #6b5e52;
+    --track: #332c26;
+    --bar: #f0e8e0;
+    --footer-text: #5a4e44;
+  }
+
+  [data-theme="light"] {
+    --bg: #faf6f2;
+    --bg-card: #ffffff;
+    --bg-card-hover: #fef9f5;
+    --border: rgba(217,119,87,0.15);
+    --text-primary: #2c1e12;
+    --text-secondary: #7a6555;
+    --text-muted: #b8a698;
+    --track: #efe7df;
+    --bar: #2c1e12;
+    --footer-text: #c4b5a5;
+  }
+
+  body {
+    width: 360px;
+    min-height: 200px;
+    font-family: 'Söhne', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, #D97757, #c4613f);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: #fff;
+  }
+  .header-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); padding: 6px; border-radius: 6px;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:hover { color: var(--accent); background: var(--accent-dim); }
+  .icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .cards { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .card:hover { background: var(--bg-card-hover); }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .card-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+  }
+  .card-value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 8px;
+    background: var(--track);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  .status-low .card-value,
+  .status-mid .card-value,
+  .status-high .card-value,
+  .status-crit .card-value { color: var(--text-primary); }
+
+  .status-low .progress-fill,
+  .status-mid .progress-fill,
+  .status-high .progress-fill,
+  .status-crit .progress-fill { background: var(--bar); }
+
+  .reset-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .reset-info svg { flex-shrink: 0; }
+
+  .state-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    gap: 12px;
+  }
+  .state-msg .icon { font-size: 32px; }
+  .state-msg .title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .state-msg .desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .state-msg a { color: var(--accent); text-decoration: none; }
+  .state-msg a:hover { text-decoration: underline; }
+
+  .footer {
+    padding: 8px 16px 12px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--footer-text);
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">C</div>
+      <div class="header-title">Claude Usage</div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeBtn" title="Toggle theme">
+        <svg id="sunIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="moonIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="refreshBtn" title="Refresh">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M2.5 22v-6h6"/>
+          <path d="M2.5 11.5a10 10 0 0 1 18.4-4.5M21.5 12.5a10 10 0 0 1-18.4 4.5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="state-msg">
+      <div class="icon">⏳</div>
+      <div class="title">Loading...</div>
+    </div>
+  </div>
+
+  <div class="footer">Data from claude.ai • Local only</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
