@@ -108,16 +108,16 @@ function renderDashboard(data) {
     html += renderCard('5-Hour Session', data.five_hour.utilization, data.five_hour.resets_at);
   }
   if (data.seven_day) {
-    html += renderCard('7-Day Usage', data.seven_day.utilization, data.seven_day.resets_at);
+    html += renderCard('Weekly Usage', data.seven_day.utilization, data.seven_day.resets_at);
   }
   if (data.seven_day_opus) {
-    html += renderCard('7-Day Opus', data.seven_day_opus.utilization, data.seven_day_opus.resets_at);
+    html += renderCard('Weekly Opus', data.seven_day_opus.utilization, data.seven_day_opus.resets_at);
   }
   if (data.seven_day_sonnet) {
-    html += renderCard('7-Day Sonnet', data.seven_day_sonnet.utilization, data.seven_day_sonnet.resets_at);
+    html += renderCard('Weekly Sonnet', data.seven_day_sonnet.utilization, data.seven_day_sonnet.resets_at);
   }
   if (data.seven_day_cowork) {
-    html += renderCard('7-Day Cowork', data.seven_day_cowork.utilization, data.seven_day_cowork.resets_at);
+    html += renderCard('Weekly Cowork', data.seven_day_cowork.utilization, data.seven_day_cowork.resets_at);
   }
   if (data.seven_day_oauth_apps) {
     html += renderCard('OAuth Apps', data.seven_day_oauth_apps.utilization, data.seven_day_oauth_apps.resets_at);

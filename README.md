@@ -5,7 +5,7 @@ A minimal Chrome extension that shows your Claude.ai usage limits at a glance �
 ## Features
 
 - **5-Hour Session** — Rolling window utilization with countdown to reset
-- **7-Day Usage** — Weekly limits broken down by model (Opus, Sonnet, Cowork, OAuth Apps)
+- **Weekly Usage** — Weekly limits broken down by model (Opus, Sonnet, Cowork, OAuth Apps)
 - **Dark / Light theme** toggle
 - **Zero config** — Automatically detects your organization from your claude.ai session
 - **Privacy-first** — No external servers, no telemetry, all data stays in your browser
