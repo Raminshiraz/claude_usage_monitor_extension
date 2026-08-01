@@ -294,16 +294,21 @@ function showState({ icon, title, desc, link }) {
 // --- Loading ----------------------------------------------------------------
 
 // The worker owns fetching so the badge and the popup never disagree.
-async function requestUsage() {
+async function requestUsage(force) {
   let resp;
   try {
-    resp = await chrome.runtime.sendMessage({ type: 'refresh-usage' });
+    resp = await chrome.runtime.sendMessage({ type: 'refresh-usage', force });
   } catch {
     throw new UsageError('UNKNOWN', 'Background worker did not respond.');
   }
   if (!resp) throw new UsageError('UNKNOWN', 'Background worker did not respond.');
   if (!resp.ok) throw new UsageError(resp.code, resp.detail);
-  return { limits: resp.limits || [], extra: resp.extra || null };
+  return {
+    limits: resp.limits || [],
+    extra: resp.extra || null,
+    fetchedAt: resp.fetchedAt,
+    stale: resp.stale === true
+  };
 }
 
 function setFreshness(text) {
@@ -315,7 +320,7 @@ let inFlight = false;
 
 // `keepVisible` revalidates behind already-rendered cards instead of throwing
 // the popup back to a spinner — which is what auto-refresh always wants.
-async function loadUsage({ keepVisible = false } = {}) {
+async function loadUsage({ keepVisible = false, force = false } = {}) {
   if (inFlight) return;
   inFlight = true;
   refreshBtn.classList.add('spinning');
@@ -323,9 +328,10 @@ async function loadUsage({ keepVisible = false } = {}) {
   if (!keepVisible) showState({ icon: '⏳', title: 'Loading…' });
 
   try {
-    const { limits, extra } = await requestUsage();
+    const { limits, extra, fetchedAt, stale } = await requestUsage(force);
     renderUsage(limits, extra);
-    setFreshness('just now');
+    // A stale result means the worker is backing off after failures.
+    setFreshness(stale ? `${formatAge(Date.now() - fetchedAt)} — retrying` : 'just now');
   } catch (err) {
     const code = err instanceof UsageError ? err.code : 'UNKNOWN';
     // Stale numbers beat an error page, so keep them and say they are stale.
@@ -342,7 +348,7 @@ async function loadUsage({ keepVisible = false } = {}) {
 }
 
 refreshBtn.addEventListener('click', () => {
-  loadUsage({ keepVisible: Boolean(content.querySelector('.cards')) });
+  loadUsage({ keepVisible: Boolean(content.querySelector('.cards')), force: true });
 });
 
 async function init() {

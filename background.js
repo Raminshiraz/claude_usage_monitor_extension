@@ -119,11 +119,45 @@ async function runRefresh() {
 // The alarm and an open popup can ask at the same time; only fetch once.
 let pending = null;
 
-function refresh() {
+// Repeated failures back off instead of retrying at the refresh interval,
+// which on a 5 second setting would be a lot of pointless requests.
+const BACKOFF_BASE_MS = 5000;
+const BACKOFF_MAX_MS = 120000;
+let failures = 0;
+let backoffUntil = 0;
+
+function noteResult(ok) {
+  if (ok) {
+    failures = 0;
+    backoffUntil = 0;
+    return;
+  }
+  failures += 1;
+  backoffUntil = Date.now() + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (failures - 1));
+}
+
+// While backing off, hand back the last good reading rather than an error, so
+// the popup keeps showing numbers.
+async function cachedResult() {
+  const { usageCache } = await chrome.storage.local.get('usageCache');
+  if (usageCache?.limits?.length || usageCache?.extra) {
+    return { ok: true, ...usageCache, stale: true };
+  }
+  return { ok: false, code: 'NETWORK', detail: '' };
+}
+
+function refresh({ force = false } = {}) {
+  if (!force && Date.now() < backoffUntil) return cachedResult();
+
   if (!pending) {
-    pending = runRefresh().finally(() => {
-      pending = null;
-    });
+    pending = runRefresh()
+      .then((result) => {
+        noteResult(result.ok);
+        return result;
+      })
+      .finally(() => {
+        pending = null;
+      });
   }
   return pending;
 }
@@ -161,7 +195,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'refresh-usage') {
-    refresh().then(sendResponse);
+    // A manual click should always try, backoff or not.
+    refresh({ force: message.force === true }).then(sendResponse);
     return true; // keep the channel open for the async reply
   }
   return undefined;

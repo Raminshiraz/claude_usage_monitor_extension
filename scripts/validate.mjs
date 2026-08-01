@@ -4,7 +4,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -76,6 +76,37 @@ for (const script of scripts) {
     execFileSync(process.execPath, ['--check', path.join(root, script)], { stdio: 'pipe' });
   } catch (err) {
     fail(`${script} failed to parse:\n${err.stderr?.toString().trim() || err.message}`);
+  }
+}
+
+// A named import that does not exist only shows up at runtime, as a worker
+// that silently fails to start. Resolve them here instead.
+for (const script of ['background.js', 'popup.js']) {
+  const file = path.join(root, script);
+  if (!existsSync(file)) continue;
+
+  const source = readFileSync(file, 'utf8');
+  for (const [, names, from] of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*'([^']+)'/g)) {
+    const target = path.join(root, path.dirname(script), from);
+    if (!existsSync(target)) {
+      fail(`${script} imports from a missing module: ${from}`);
+      continue;
+    }
+
+    let module;
+    try {
+      module = await import(pathToFileURL(target).href);
+    } catch (err) {
+      fail(`${script} could not load ${from}: ${err.message}`);
+      continue;
+    }
+
+    const wanted = names
+      .split(',')
+      .map((name) => name.trim().split(/\s+as\s+/)[0].trim())
+      .filter(Boolean);
+    const missing = wanted.filter((name) => !(name in module));
+    if (missing.length) fail(`${script} imports missing from ${from}: ${missing.join(', ')}`);
   }
 }
 
