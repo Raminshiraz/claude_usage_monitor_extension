@@ -1,0 +1,14 @@
+# Local tooling
+.claude/settings.local.json
+
+# Dependencies
+node_modules/
+
+# Build output
+web-ext-artifacts/
+dist/
+*.zip
+
+# OS cruft
+.DS_Store
+Thumbs.db

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No install step: the project has no dependencies.
+      - name: Validate manifest and scripts
+        run: node scripts/validate.mjs
+
+      - name: Run tests
+        run: node --test
+
+      - name: Build package
+        run: node scripts/package.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: dist/*.zip

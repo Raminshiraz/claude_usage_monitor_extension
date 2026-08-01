@@ -1,0 +1,14 @@
+{
+  "name": "claude-usage-monitor",
+  "version": "3.0.0",
+  "description": "Browser extension that shows your Claude.ai usage limits at a glance",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "validate": "node scripts/validate.mjs",
+    "package": "node scripts/validate.mjs && node scripts/package.mjs",
+    "check": "npm run validate && npm test"
+  }
+}
