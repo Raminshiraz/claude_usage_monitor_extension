@@ -4,7 +4,8 @@ A minimal browser extension that shows your Claude.ai usage at a glance — sess
 
 ![Claude Usage Monitor](screenshot.png)
 
-> The screenshot predates the toolbar badge, the usage credits card and the auto-refresh selector.
+
+
 
 ## Features
 
