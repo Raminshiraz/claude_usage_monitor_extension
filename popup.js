@@ -1,180 +1,372 @@
 // popup.js — Claude Usage Monitor
 
+import {
+  getStatus,
+  formatCountdown,
+  formatResetTime,
+  formatAge,
+  formatUsd,
+  formatDate,
+  describeError,
+  REFRESH_OPTIONS,
+  normaliseRefreshSeconds,
+  UsageError
+} from './lib/usage.js';
+import { systemThemeFrom, resolveTheme, buildOverride } from './lib/theme.js';
+
+const COUNTDOWN_TICK_MS = 30000;
+
 const content = document.getElementById('content');
 const refreshBtn = document.getElementById('refreshBtn');
+const footerText = document.getElementById('footerText');
+const intervalSelect = document.getElementById('intervalSelect');
 const themeBtn = document.getElementById('themeBtn');
 const sunIcon = document.getElementById('sunIcon');
 const moonIcon = document.getElementById('moonIcon');
+const notifyBtn = document.getElementById('notifyBtn');
+const bellOnIcon = document.getElementById('bellOnIcon');
+const bellOffIcon = document.getElementById('bellOffIcon');
 
-// Theme handling
-function setTheme(theme) {
+const CLOCK_SVG =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+
+// --- Theme: follow the OS unless overridden since the OS last changed --------
+
+const systemQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+function currentSystemTheme() {
+  return systemThemeFrom(systemQuery.matches);
+}
+
+function applyTheme(theme, following) {
   document.documentElement.setAttribute('data-theme', theme);
-  chrome.storage.local.set({ theme });
-  if (theme === 'light') {
-    sunIcon.style.display = 'none';
-    moonIcon.style.display = 'block';
-  } else {
-    sunIcon.style.display = 'block';
-    moonIcon.style.display = 'none';
-  }
+  const isLight = theme === 'light';
+  sunIcon.style.display = isLight ? 'none' : 'block';
+  moonIcon.style.display = isLight ? 'block' : 'none';
+  themeBtn.title = following ? `Theme: system (${theme})` : `Theme: ${theme}`;
 }
 
-chrome.storage.local.get('theme', (result) => {
-  setTheme(result.theme || 'dark');
-});
-
-themeBtn.addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme');
-  setTheme(current === 'dark' ? 'light' : 'dark');
-});
-
-refreshBtn.addEventListener('click', () => loadUsage());
-
-async function getOrgId() {
-  const cookie = await chrome.cookies.get({ url: 'https://claude.ai', name: 'lastActiveOrg' });
-  return cookie?.value || null;
+function syncTheme(override) {
+  const resolved = resolveTheme(currentSystemTheme(), override);
+  applyTheme(resolved.theme, resolved.following);
+  return resolved;
 }
 
-async function fetchUsage(orgId) {
-  const url = `https://claude.ai/api/organizations/${orgId}/usage`;
-  const resp = await fetch(url, {
-    method: 'GET',
-    credentials: 'include',
-    headers: {
-      'accept': '*/*',
-      'content-type': 'application/json',
-      'anthropic-client-platform': 'web_claude_ai'
+function reveal() {
+  document.documentElement.classList.add('ready');
+}
+
+try {
+  chrome.storage.local.get(['themeOverride'], (result) => {
+    try {
+      const resolved = syncTheme(result?.themeOverride || null);
+      // The OS moved since we last ran, so the override has served its purpose.
+      if (result?.themeOverride && !resolved.override) {
+        chrome.storage.local.remove('themeOverride');
+      }
+    } finally {
+      reveal();
     }
   });
-
-  if (resp.status === 401 || resp.status === 403) throw new Error('AUTH');
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+} catch {
+  syncTheme(null);
+  reveal();
 }
 
-function getStatus(utilization) {
-  if (utilization >= 95) return 'crit';
-  if (utilization >= 75) return 'high';
-  if (utilization >= 50) return 'mid';
-  return 'low';
+themeBtn.addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  const override = buildOverride(next, currentSystemTheme());
+
+  if (override) chrome.storage.local.set({ themeOverride: override });
+  else chrome.storage.local.remove('themeOverride');
+
+  applyTheme(next, !override);
+});
+
+systemQuery.addEventListener('change', () => {
+  chrome.storage.local.remove('themeOverride');
+  syncTheme(null);
+});
+
+// --- Alerts -----------------------------------------------------------------
+
+function setNotify(enabled) {
+  chrome.storage.local.set({ notifyEnabled: enabled });
+  notifyBtn.setAttribute('aria-pressed', String(enabled));
+  notifyBtn.title = enabled ? 'Alerts on' : 'Alerts off';
+  bellOnIcon.style.display = enabled ? 'block' : 'none';
+  bellOffIcon.style.display = enabled ? 'none' : 'block';
 }
 
-function formatCountdown(resetIso) {
-  if (!resetIso) return '';
+chrome.storage.local.get('notifyEnabled', (result) => {
+  setNotify(result.notifyEnabled !== false);
+});
+
+notifyBtn.addEventListener('click', () => {
+  setNotify(notifyBtn.getAttribute('aria-pressed') !== 'true');
+});
+
+// --- Auto-refresh -----------------------------------------------------------
+
+let autoTimer = null;
+
+function applyInterval(seconds) {
+  clearInterval(autoTimer);
+  autoTimer = null;
+  intervalSelect.value = String(seconds);
+  if (seconds) autoTimer = setInterval(() => loadUsage({ keepVisible: true }), seconds * 1000);
+}
+
+intervalSelect.addEventListener('change', () => {
+  const seconds = normaliseRefreshSeconds(intervalSelect.value);
+  chrome.storage.local.set({ refreshSeconds: seconds });
+  applyInterval(seconds);
+});
+
+// --- Rendering --------------------------------------------------------------
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+// Countdown labels would otherwise go stale while the popup sits open.
+let countdownTargets = [];
+let countdownTimer = null;
+
+function replaceContent(node) {
+  countdownTargets = [];
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+  content.replaceChildren(node);
+}
+
+function tickCountdowns() {
   const now = Date.now();
-  const reset = new Date(resetIso).getTime();
-  let diff = reset - now;
-  if (diff <= 0) return 'Resetting soon\u2026';
-
-  const days = Math.floor(diff / 86400000);
-  diff %= 86400000;
-  const hrs = Math.floor(diff / 3600000);
-  diff %= 3600000;
-  const mins = Math.floor(diff / 60000);
-
-  if (days > 0) return `Resets in ${days}d ${hrs}h`;
-  if (hrs > 0) return `Resets in ${hrs}h ${mins}m`;
-  return `Resets in ${mins}m`;
-}
-
-function clockSvg() {
-  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-}
-
-function renderCard(label, utilization, resetsAt) {
-  if (utilization == null) return '';
-  const status = getStatus(utilization);
-  const pct = Math.round(utilization);
-  const countdown = formatCountdown(resetsAt);
-
-  return `
-    <div class="card status-${status}">
-      <div class="card-header">
-        <span class="card-label">${label}</span>
-        <span class="card-value">${pct}% used</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill" style="width: ${pct}%"></div>
-      </div>
-      ${countdown ? `<div class="reset-info">${clockSvg()}<span>${countdown}</span></div>` : ''}
-    </div>
-  `;
-}
-
-function renderDashboard(data) {
-  let html = '<div class="cards">';
-
-  if (data.five_hour) {
-    html += renderCard('5-Hour Session', data.five_hour.utilization, data.five_hour.resets_at);
-  }
-  if (data.seven_day) {
-    html += renderCard('Weekly Usage', data.seven_day.utilization, data.seven_day.resets_at);
-  }
-  if (data.seven_day_opus) {
-    html += renderCard('Weekly Opus', data.seven_day_opus.utilization, data.seven_day_opus.resets_at);
-  }
-  if (data.seven_day_sonnet) {
-    html += renderCard('Weekly Sonnet', data.seven_day_sonnet.utilization, data.seven_day_sonnet.resets_at);
-  }
-  if (data.seven_day_cowork) {
-    html += renderCard('Weekly Cowork', data.seven_day_cowork.utilization, data.seven_day_cowork.resets_at);
-  }
-  if (data.seven_day_oauth_apps) {
-    html += renderCard('OAuth Apps', data.seven_day_oauth_apps.utilization, data.seven_day_oauth_apps.resets_at);
-  }
-
-  html += '</div>';
-  content.innerHTML = html;
-}
-
-function showError(type) {
-  if (type === 'AUTH') {
-    content.innerHTML = `
-      <div class="state-msg">
-        <div class="icon">\uD83D\uDD12</div>
-        <div class="title">Not logged in</div>
-        <div class="desc">Open <a href="https://claude.ai" target="_blank">claude.ai</a> and log in first, then try again.</div>
-      </div>`;
-  } else if (type === 'NO_ORG') {
-    content.innerHTML = `
-      <div class="state-msg">
-        <div class="icon">\u2699\uFE0F</div>
-        <div class="title">Not logged in to Claude.ai</div>
-        <div class="desc">Please <a href="https://claude.ai" target="_blank">log in to claude.ai</a> first, then reopen this extension.</div>
-      </div>`;
-  } else {
-    content.innerHTML = `
-      <div class="state-msg">
-        <div class="icon">\u26A0\uFE0F</div>
-        <div class="title">Something went wrong</div>
-        <div class="desc">${type}<br>Click refresh to try again.</div>
-      </div>`;
+  for (const { resetsAt, node } of countdownTargets) {
+    node.textContent = formatCountdown(resetsAt, now);
   }
 }
 
-async function loadUsage() {
+function buildTrack(utilization, label, { thin = false } = {}) {
+  const track = el('div', thin ? 'progress-track thin' : 'progress-track');
+  track.setAttribute('role', 'progressbar');
+  track.setAttribute('aria-valuemin', '0');
+  track.setAttribute('aria-valuemax', '100');
+  track.setAttribute('aria-valuenow', String(Math.round(utilization)));
+  track.setAttribute('aria-label', label);
+
+  const fill = el('div', 'progress-fill');
+  // Overage can report past 100; the bar should stop at full.
+  fill.style.width = `${Math.max(0, Math.min(100, utilization))}%`;
+  track.append(fill);
+  return track;
+}
+
+function buildCard(limit, countdownSinks) {
+  const status = getStatus(limit.utilization);
+  const pct = Math.round(limit.utilization);
+
+  const card = el('div', `card status-${status}`);
+
+  const header = el('div', 'card-header');
+  header.append(el('span', 'card-label', limit.label), el('span', 'card-value', `${pct}% used`));
+  card.append(header, buildTrack(limit.utilization, `${limit.label} usage`));
+
+  const countdown = formatCountdown(limit.resetsAt);
+  if (countdown) {
+    const info = el('div', 'reset-info');
+    const icon = el('span', 'reset-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = CLOCK_SVG;
+    const text = el('span', null, countdown);
+    info.append(icon, text);
+
+    const exact = formatResetTime(limit.resetsAt);
+    if (exact) info.title = `Resets at ${exact}`;
+
+    card.append(info);
+    countdownSinks.push({ resetsAt: limit.resetsAt, node: text });
+  }
+
+  return card;
+}
+
+function promoNote(extra) {
+  const expires = formatDate(extra.promoExpiresAt);
+  return `${formatUsd(extra.promoCents)} promotional${expires ? `, expires ${expires}` : ''}`;
+}
+
+// The money you actually hold, which is a different figure from the headroom
+// under the monthly limit above it.
+function buildBalance(extra) {
+  const sub = el('div', 'card-sub');
+  const row = el('div', 'card-sub-row');
+  row.append(
+    el('span', 'card-sub-label', 'Balance'),
+    el('span', 'card-sub-value strong', formatUsd(extra.balanceCents))
+  );
+  sub.append(row);
+  if (extra.promoCents != null) sub.append(el('div', 'card-note', promoNote(extra)));
+  return sub;
+}
+
+function buildExtraCard(extra) {
+  const hasBar = extra.utilization != null;
+  const status = hasBar ? getStatus(extra.utilization) : 'low';
+  const card = el('div', `card card-extra status-${status}`);
+
+  const header = el('div', 'card-header');
+  header.append(
+    el('span', 'card-label', 'Usage Credits'),
+    el(
+      'span',
+      'card-value',
+      hasBar ? `${Math.round(extra.utilization)}% used` : formatUsd(extra.balanceCents)
+    )
+  );
+  card.append(header);
+
+  if (!hasBar) {
+    card.append(el('div', 'card-note', 'Current balance'));
+    if (extra.promoCents != null) card.append(el('div', 'card-note', promoNote(extra)));
+    return card;
+  }
+
+  card.append(buildTrack(extra.utilization, 'Spend against your monthly limit'));
+
+  // The remainder here is headroom under the monthly limit — deliberately not
+  // called a balance, which is a different and usually larger number.
+  const parts = [
+    `${formatUsd(extra.usedCents)} spent of ${formatUsd(extra.totalCents)} monthly limit`
+  ];
+  if (extra.remainingCents != null) parts.push(`${formatUsd(extra.remainingCents)} left`);
+  card.append(el('div', 'card-note', parts.join(' • ')));
+
+  if (extra.limitReached) card.append(el('div', 'card-warn', 'Monthly spend limit reached'));
+  if (extra.balanceCents != null) card.append(buildBalance(extra));
+
+  return card;
+}
+
+function renderUsage(limits, extra) {
+  if (!limits.length && !extra) {
+    showState(describeError('NO_LIMITS'));
+    return;
+  }
+
+  const sinks = [];
+  const cards = el('div', 'cards');
+  for (const limit of limits) cards.append(buildCard(limit, sinks));
+  if (extra) cards.append(buildExtraCard(extra));
+
+  replaceContent(cards);
+
+  countdownTargets = sinks;
+  if (sinks.length) countdownTimer = setInterval(tickCountdowns, COUNTDOWN_TICK_MS);
+}
+
+function showState({ icon, title, desc, link }) {
+  const wrap = el('div', 'state-msg');
+  const glyph = el('div', 'icon', icon);
+  glyph.setAttribute('aria-hidden', 'true');
+  wrap.append(glyph, el('div', 'title', title));
+
+  if (desc) {
+    const description = el('div', 'desc', desc);
+    if (link) {
+      const anchor = el('a', null, 'Open claude.ai');
+      anchor.href = 'https://claude.ai';
+      anchor.target = '_blank';
+      anchor.rel = 'noreferrer';
+      description.append(document.createElement('br'), anchor);
+    }
+    wrap.append(description);
+  }
+
+  replaceContent(wrap);
+}
+
+// --- Loading ----------------------------------------------------------------
+
+// The worker owns fetching so the badge and the popup never disagree.
+async function requestUsage() {
+  let resp;
+  try {
+    resp = await chrome.runtime.sendMessage({ type: 'refresh-usage' });
+  } catch {
+    throw new UsageError('UNKNOWN', 'Background worker did not respond.');
+  }
+  if (!resp) throw new UsageError('UNKNOWN', 'Background worker did not respond.');
+  if (!resp.ok) throw new UsageError(resp.code, resp.detail);
+  return { limits: resp.limits || [], extra: resp.extra || null };
+}
+
+function setFreshness(text) {
+  footerText.textContent = text ? `Updated ${text}` : 'Data from claude.ai • Local only';
+}
+
+// Rapid clicks used to fire overlapping requests whose results raced.
+let inFlight = false;
+
+// `keepVisible` revalidates behind already-rendered cards instead of throwing
+// the popup back to a spinner — which is what auto-refresh always wants.
+async function loadUsage({ keepVisible = false } = {}) {
+  if (inFlight) return;
+  inFlight = true;
   refreshBtn.classList.add('spinning');
-  content.innerHTML = `
-    <div class="state-msg">
-      <div class="icon">\u23F3</div>
-      <div class="title">Loading...</div>
-    </div>`;
+  refreshBtn.disabled = true;
+  if (!keepVisible) showState({ icon: '⏳', title: 'Loading…' });
 
   try {
-    const orgId = await getOrgId();
-    if (!orgId) {
-      showError('NO_ORG');
-      refreshBtn.classList.remove('spinning');
-      return;
-    }
-
-    const data = await fetchUsage(orgId);
-    renderDashboard(data);
+    const { limits, extra } = await requestUsage();
+    renderUsage(limits, extra);
+    setFreshness('just now');
   } catch (err) {
-    showError(err.message || 'Unknown error');
+    const code = err instanceof UsageError ? err.code : 'UNKNOWN';
+    // Stale numbers beat an error page, so keep them and say they are stale.
+    if (keepVisible && content.querySelector('.cards')) {
+      setFreshness(`${describeError(code, err?.detail).title.toLowerCase()} — showing last known`);
+    } else {
+      showState(describeError(code, err?.detail || err?.message));
+    }
+  } finally {
+    inFlight = false;
+    refreshBtn.classList.remove('spinning');
+    refreshBtn.disabled = false;
   }
-
-  refreshBtn.classList.remove('spinning');
 }
 
-loadUsage();
+refreshBtn.addEventListener('click', () => {
+  loadUsage({ keepVisible: Boolean(content.querySelector('.cards')) });
+});
+
+async function init() {
+  for (const seconds of REFRESH_OPTIONS) {
+    const option = el('option', null, seconds ? `${seconds}s` : 'Off');
+    option.value = String(seconds);
+    intervalSelect.append(option);
+  }
+
+  const { usageCache, refreshSeconds } = await chrome.storage.local.get([
+    'usageCache',
+    'refreshSeconds'
+  ]);
+
+  applyInterval(normaliseRefreshSeconds(refreshSeconds));
+
+  if (usageCache?.limits?.length || usageCache?.extra) {
+    renderUsage(usageCache.limits || [], usageCache.extra || null);
+    setFreshness(formatAge(Date.now() - usageCache.fetchedAt));
+    await loadUsage({ keepVisible: true });
+    return;
+  }
+
+  await loadUsage();
+}
+
+init();
