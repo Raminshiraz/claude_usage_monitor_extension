@@ -237,6 +237,14 @@
     font-size: 10px;
     color: var(--footer-text);
   }
+  /* The longer label leaves less room, so the status text truncates instead of
+     pushing the selector off the edge. */
+  .footer > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .auto-refresh {
     display: flex;
     align-items: center;
@@ -298,7 +306,7 @@
   <div class="footer">
     <span id="footerText">Data from claude.ai • Local only</span>
     <label class="auto-refresh" title="How often usage is refreshed, in the popup and on the toolbar badge. 30s is as fast as Chrome allows background work.">
-      Auto
+      Auto update
       <select id="intervalSelect" aria-label="Auto-refresh interval"></select>
     </label>
   </div>
