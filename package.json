@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-monitor",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Browser extension that shows your Claude.ai usage limits at a glance",
   "license": "MIT",
   "private": true,

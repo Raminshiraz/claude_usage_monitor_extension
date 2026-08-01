@@ -42,6 +42,18 @@ test('normaliseRefreshSeconds only accepts the offered intervals', () => {
   assert.equal(normaliseRefreshSeconds(7), DEFAULT_REFRESH_SECONDS);
   assert.equal(normaliseRefreshSeconds('abc'), DEFAULT_REFRESH_SECONDS);
   assert.equal(normaliseRefreshSeconds(undefined), DEFAULT_REFRESH_SECONDS);
+  // Anyone carrying a stored 5, 10 or 20 from the old options migrates itself.
+  for (const retired of [5, 10, 20]) {
+    assert.equal(normaliseRefreshSeconds(retired), DEFAULT_REFRESH_SECONDS);
+  }
+});
+
+test('every refresh option maps onto a real alarm period', () => {
+  // Chrome will not fire an alarm more often than every 30 seconds, so no
+  // option may need clamping — otherwise the badge silently ignores the choice.
+  for (const seconds of REFRESH_OPTIONS.filter(Boolean)) {
+    assert.equal(Math.max(0.5, seconds / 60), seconds / 60, `${seconds}s must not clamp`);
+  }
 });
 
 test('toLimits keeps known buckets in display order', () => {

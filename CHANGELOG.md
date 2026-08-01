@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.1.0
+
+### Changed
+
+- Auto-refresh is 30s, 60s or off, defaulting to 30s. The shorter intervals were removed: Chrome will not fire a background alarm more often than every 30 seconds, so they refreshed the open popup while leaving the badge no fresher, at several times the request volume. Both remaining options map exactly onto a real alarm period, so the popup and the badge now refresh at the same rate. A stored 5, 10 or 20 migrates itself to 30
+- The credit balance is fetched at most every five minutes and reused in between. Requesting it on every tick alongside usage doubled the traffic for a figure that barely moves, which is what turned a short interval into connection failures
+
+### Added
+
+- A dropped connection retries once, so a single blip does not replace good numbers with an error
+- Repeated failures back off from 5 seconds up to 2 minutes, handing back the last good reading rather than an error, so the popup keeps showing numbers while it recovers. The refresh button ignores the backoff
+- The validator resolves named imports, catching a missing export at build time instead of as a worker that silently fails to start
+
 ## 3.0.0
 
 A rewrite of everything above the icons. Versions 1.1 through 2.0 were cut while

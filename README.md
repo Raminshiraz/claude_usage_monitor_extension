@@ -7,7 +7,7 @@ A minimal browser extension that shows your Claude.ai usage limits at a glance �
 ## Features
 
 - **Toolbar badge** — Your 5-hour session usage is always visible, colour-coded, without opening anything
-- **Auto-refresh** — Every 10 seconds by default; selectable as 5s, 20s, 60s or off
+- **Auto-refresh** — Every 30 seconds by default; selectable as 30s, 60s or off
 - **5-Hour Session** — Rolling window utilization with a live countdown to reset
 - **Weekly Usage** — Weekly limits broken down by model (Opus, Sonnet, Cowork, OAuth Apps)
 - **Extra usage** — If you have prepaid credit, shows the percent spent and the dollar amounts. Hidden entirely if you have none
@@ -32,13 +32,13 @@ Chromium-based browsers only (Chrome, Edge, Brave, Arc). Firefox is not supporte
 2. The badge on the toolbar icon always shows your **5-hour session** usage
 3. Click the icon for the full breakdown — hover a countdown to see the exact reset time
 4. Use the bell button to turn threshold alerts on or off
-5. Use the **Auto** selector in the footer to choose how often it refreshes
+5. Use the **Auto** selector in the footer to choose how often it refreshes (30s, 60s or off)
 
 ### Auto-refresh
 
-Every 10 seconds by default, selectable as 5s, 10s, 20s, 60s or Off from the popup footer.
+Every 30 seconds by default, selectable as 30s, 60s or Off from the popup footer. The interval applies to both the popup and the badge.
 
-Intervals under 30 seconds apply **while the popup is open**. Chrome will not fire a background alarm more often than every 30 seconds, so the badge updates at 30s at the fastest no matter which interval you pick. Setting Off stops both.
+Nothing quicker is offered on purpose. Chrome will not fire a background alarm more often than every 30 seconds, so a shorter interval would refresh the open popup while leaving the badge — the part you actually watch — no fresher, at several times the request volume. Setting Off stops both; the refresh button still works.
 
 > The extension reads the `lastActiveOrg` cookie from claude.ai to identify your account, falling back to the organizations API if the cookie is not set. No credentials are stored or transmitted anywhere.
 
