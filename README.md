@@ -1,8 +1,10 @@
 # Claude Usage Monitor — Browser Extension
 
-A minimal browser extension that shows your Claude.ai usage limits at a glance — session window, weekly caps per model — all using your existing browser session.
+A minimal browser extension that shows your Claude.ai usage at a glance — session window, weekly caps per model, and your usage credit balance — all using your existing browser session.
 
 ![Claude Usage Monitor](screenshot.png)
+
+> The screenshot predates the toolbar badge, the usage credits card and the auto-refresh selector.
 
 ## Features
 
@@ -10,7 +12,7 @@ A minimal browser extension that shows your Claude.ai usage limits at a glance �
 - **Auto-refresh** — Every 30 seconds by default; selectable as 30s, 60s or off
 - **5-Hour Session** — Rolling window utilization with a live countdown to reset
 - **Weekly Usage** — Weekly limits broken down by model (Opus, Sonnet, Cowork, OAuth Apps)
-- **Extra usage** — If you have prepaid credit, shows the percent spent and the dollar amounts. Hidden entirely if you have none
+- **Usage credits** — Spend against your monthly limit, plus your credit balance and any promotional credit with its expiry. Hidden entirely if you have none
 - **Alerts** — An optional notification the first time a limit passes 80% and 95%
 - **Opens instantly** — The last reading is cached, so the popup shows numbers immediately and refreshes behind them
 - **Follows your system theme** — Dark when your computer is dark, light when it is light, with a manual override
@@ -34,13 +36,15 @@ Chromium-based browsers only (Chrome, Edge, Brave, Arc). Firefox is not supporte
 4. Use the bell button to turn threshold alerts on or off
 5. Use the **Auto** selector in the footer to choose how often it refreshes (30s, 60s or off)
 
+> The extension reads the `lastActiveOrg` cookie from claude.ai to identify your account, falling back to the organizations API if the cookie is not set. No credentials are stored or transmitted anywhere.
+
 ### Auto-refresh
 
 Every 30 seconds by default, selectable as 30s, 60s or Off from the popup footer. The interval applies to both the popup and the badge.
 
 Nothing quicker is offered on purpose. Chrome will not fire a background alarm more often than every 30 seconds, so a shorter interval would refresh the open popup while leaving the badge — the part you actually watch — no fresher, at several times the request volume. Setting Off stops both; the refresh button still works.
 
-> The extension reads the `lastActiveOrg` cookie from claude.ai to identify your account, falling back to the organizations API if the cookie is not set. No credentials are stored or transmitted anywhere.
+A dropped connection is retried once. If failures persist, refreshing backs off from 5 seconds up to 2 minutes and the popup keeps showing your last good reading rather than an error; the refresh button ignores the backoff.
 
 ### Badge colours
 
@@ -51,26 +55,28 @@ Nothing quicker is offered on purpose. Chrome will not fire a background alarm m
 | Orange | 75–94% |
 | Red | 95% and above |
 
-`?` means you are signed out; `!` means the last refresh failed.
+`?` means you are signed out, `!` means the last refresh failed, and an empty badge means the API reported no session window.
 
 ### Theme
 
 The popup opens in whatever mode your computer is set to. Clicking the sun/moon button overrides that, and the override sticks — until your computer itself switches modes, at which point it is dropped and the popup follows the system again. Picking the mode the system is already using simply resumes following it.
 
-### Extra usage
+### Usage credits
 
-Usage credits cover you once your plan allowance runs out. The card shows spend against the monthly spend limit you set:
+Usage credits cover you once your plan allowance runs out. The card shows spend against the monthly spend limit you set, and the credit balance backing it:
 
 ```
 USAGE CREDITS                          1% used
 [▏────────────────────────────────────────]
-$0.64 spent of $50.00 monthly limit • $49.36 left
+$0.64 spent of $50 monthly limit • $49.36 left
 ──────────────────────────────────────────────
 BALANCE                                 $60.36
 $60.34 promotional, expires Sep 19, 2026
 ```
 
 The two figures are deliberately separate: `$49.36 left` is headroom under your monthly spend limit, while `$60.36` is the money you actually hold. They are different numbers and the balance is usually larger.
+
+Whole amounts drop the cents — `$50`, not `$50.00` — while anything with a fraction keeps them.
 
 "Monthly spend limit reached" is flagged when you hit the cap. If usage credits are switched off, or the account has none, no card is shown at all.
 
@@ -135,9 +141,11 @@ No dependencies. Node 20 or newer.
 
 ```bash
 node --test                 # run the unit tests
-node scripts/validate.mjs   # check the manifest, assets and scripts
+node scripts/validate.mjs   # manifest, assets, syntax and named imports
 node scripts/package.mjs    # build dist/claude-usage-monitor-<version>.zip
 ```
+
+`validate.mjs` resolves every named import against the module it comes from, so a missing export fails here rather than as a service worker that silently never starts.
 
 Layout:
 
@@ -149,6 +157,8 @@ Layout:
 | `lib/usage.js` | Shared fetching and formatting, used by both |
 | `lib/theme.js` | System-theme resolution and override rules |
 | `test/` | Unit tests for the pure helpers |
+| `scripts/` | Validation and packaging |
+| `.github/workflows/` | CI: validate, test, package |
 
 ## License
 
@@ -157,5 +167,5 @@ MIT — see [LICENSE](LICENSE) for details.
 ## Disclaimer
 
 - This is an **unofficial**, community-built tool and is **not affiliated with or endorsed by Anthropic**.
-- It relies on an internal claude.ai API endpoint that may change or break without notice.
+- It relies on internal claude.ai API endpoints that may change or break without notice.
 - Use at your own risk and in accordance with [Anthropic's Terms of Service](https://www.anthropic.com/terms).
