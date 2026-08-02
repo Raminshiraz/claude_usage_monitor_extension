@@ -5,7 +5,7 @@ import {
   getStatus,
   formatCountdown,
   describeError,
-  probeOrigin,
+  hasHostAccess,
   storageGet,
   storageSet,
   BADGE_LIMIT_KEY,
@@ -119,18 +119,26 @@ async function runRefresh() {
     await chrome.storage.local.set({ usageCache: { limits, extra, fetchedAt } });
     return { ok: true, limits, extra, fetchedAt };
   } catch (err) {
-    const code = err instanceof UsageError ? err.code : 'UNKNOWN';
-    const detail = err?.detail || err?.message || '';
-    await paintProblem(code);
+    let code = err instanceof UsageError ? err.code : 'UNKNOWN';
+    let detail = err?.detail || err?.message || '';
 
-    // A transport failure says nothing about itself, so ask the origin directly
-    // whether it is reachable at all before writing the failure down.
-    const probe = code === 'NETWORK' ? ` — probe: ${await probeOrigin()}` : '';
+    // Withheld site access is the first thing to rule out, because nothing
+    // else can succeed without it: Chrome refuses every request to claude.ai
+    // at the CORS check before it leaves the browser, and `fetch` reports that
+    // as the same "Failed to fetch" it gives for a dead network. Reported as a
+    // connection problem it sends people to check the one thing that is fine.
+    if (code === 'NETWORK' && !(await hasHostAccess())) {
+      code = 'NO_ACCESS';
+      detail = 'host permission for claude.ai is not granted';
+    }
+
+    await paintProblem(code);
+    await storageSet('session', LAST_FAILURE_KEY, { code, detail });
 
     // The popup only ever shows the friendly wording, so this is the one place
     // the actual reason a request died is recoverable. Inspect it from
     // chrome://extensions -> the extension -> "service worker".
-    console.warn(`[usage] refresh failed: ${code}${detail ? ` — ${detail}` : ''}${probe}`);
+    console.warn(`[usage] refresh failed: ${code}${detail ? ` — ${detail}` : ''}`);
     return { ok: false, code, detail, retryAfterMs: err?.retryAfterMs ?? null };
   }
 }
@@ -152,6 +160,10 @@ let pending = null;
 const BACKOFF_BASE_MS = 5000;
 const BACKOFF_MAX_MS = 120000;
 const BACKOFF_KEY = 'refreshBackoff';
+
+// The last failure, so a backoff with no numbers to fall back on can report
+// what actually went wrong instead of inventing a code.
+const LAST_FAILURE_KEY = 'lastFailure';
 
 async function readBackoff() {
   return (await storageGet('session', BACKOFF_KEY)) || { failures: 0, until: 0 };
@@ -191,7 +203,13 @@ async function cachedResult() {
   if (usageCache?.limits?.length || usageCache?.extra) {
     return { ok: true, ...usageCache, stale: true };
   }
-  return { ok: false, code: 'NETWORK', detail: '' };
+
+  // No numbers to fall back on, so the failure is all there is to report — and
+  // it has to be the one that actually happened. This used to answer NETWORK
+  // whatever had gone wrong, so withheld access or an expired login spent the
+  // whole backoff window mislabelled as a connection problem.
+  const last = (await storageGet('session', LAST_FAILURE_KEY)) || {};
+  return { ok: false, code: last.code || 'NETWORK', detail: last.detail || '' };
 }
 
 async function refresh({ force = false } = {}) {
@@ -242,6 +260,17 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Re-arm as soon as the interval is changed in the popup.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.refreshSeconds) ensureAlarm();
+});
+
+// Granting the permission is the precise event that unblocks these requests,
+// so there is nothing left to wait for. This fires whichever route was taken —
+// the popup's button, or Site access in chrome://extensions, which the popup
+// never hears about — so the badge recovers either way instead of staying
+// wrong until the next alarm. Forced, because the failures that led here have
+// left a backoff window in place, and it is precisely what just stopped
+// applying.
+chrome.permissions.onAdded.addListener(() => {
+  refresh({ force: true });
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

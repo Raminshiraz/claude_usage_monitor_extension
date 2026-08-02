@@ -6,6 +6,7 @@ import {
   retryAfterMs,
   creditsCacheIsFresh,
   describeError,
+  hasHostAccess,
   storageGet,
   storageSet
 } from '../lib/usage.js';
@@ -94,6 +95,27 @@ test('the new codes have wording of their own', () => {
   assert.equal(describeError('RATE_LIMIT').title, 'Asked to slow down');
   // Distinct from the auth wording, which is the whole point of splitting them.
   assert.notEqual(describeError('BLOCKED').title, describeError('AUTH').title);
+});
+
+test('withheld site access is its own fault, with its own fix', () => {
+  const denied = describeError('NO_ACCESS');
+
+  // The failure this was written for: Chrome refusing the request at the CORS
+  // check reads as "Failed to fetch", so it was reported as a dead connection
+  // and sent people to check a network that was working. Never alike again.
+  assert.notEqual(denied.title, describeError('NETWORK').title);
+  assert.match(denied.desc, /chrome:\/\/extensions/);
+
+  // The popup renders its permission button off this flag; losing it turns the
+  // one repairable failure back into a dead end.
+  assert.equal(denied.grant, true);
+  assert.ok(!describeError('NETWORK').grant);
+});
+
+test('host access is assumed where the permissions API is absent', async () => {
+  // The tests, and any other non-extension context: report access rather than
+  // invent a permission failure that cannot be true there.
+  assert.equal(await hasHostAccess(), true);
 });
 
 test('storage helpers are inert where chrome is not', async () => {

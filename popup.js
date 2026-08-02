@@ -8,6 +8,7 @@ import {
   formatUsd,
   formatDate,
   describeError,
+  CLAUDE_ORIGIN_PATTERN,
   REFRESH_OPTIONS,
   normaliseRefreshSeconds,
   UsageError
@@ -270,7 +271,28 @@ function renderUsage(limits, extra) {
   if (sinks.length) countdownTimer = setInterval(tickCountdowns, COUNTDOWN_TICK_MS);
 }
 
-function showState({ icon, title, desc, link }) {
+// Withheld site access is the one failure the popup can repair by itself, and
+// asking for a permission needs a user gesture — so it has to be a button
+// here, rather than anything the worker could do on its own.
+function grantButton() {
+  const button = el('button', 'state-action', 'Grant access to claude.ai');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      if (await chrome.permissions.request({ origins: [CLAUDE_ORIGIN_PATTERN] })) {
+        await loadUsage({ force: true });
+        return;
+      }
+    } catch {
+      // Chrome will not always prompt from here. The written instructions in
+      // the message cover that case.
+    }
+    button.disabled = false;
+  });
+  return button;
+}
+
+function showState({ icon, title, desc, link, grant }) {
   const wrap = el('div', 'state-msg');
   const glyph = el('div', 'icon', icon);
   glyph.setAttribute('aria-hidden', 'true');
@@ -287,6 +309,8 @@ function showState({ icon, title, desc, link }) {
     }
     wrap.append(description);
   }
+
+  if (grant) wrap.append(grantButton());
 
   replaceContent(wrap);
 }
@@ -313,6 +337,8 @@ async function requestUsage(force) {
 
 function setFreshness(text) {
   footerText.textContent = text ? `Updated ${text}` : 'Data from claude.ai • Local only';
+  // Clears any explanation a previous failure left on the footer.
+  footerText.title = '';
 }
 
 // Rapid clicks used to fire overlapping requests whose results raced.
@@ -334,11 +360,21 @@ async function loadUsage({ keepVisible = false, force = false } = {}) {
     setFreshness(stale ? `${formatAge(Date.now() - fetchedAt)} — retrying` : 'just now');
   } catch (err) {
     const code = err instanceof UsageError ? err.code : 'UNKNOWN';
+    const explained = describeError(code, err?.detail || err?.message);
+
     // Stale numbers beat an error page, so keep them and say they are stale.
-    if (keepVisible && content.querySelector('.cards')) {
-      setFreshness(`${describeError(code, err?.detail).title.toLowerCase()} — showing last known`);
+    // The text is set directly: the "Updated" prefix belongs in front of a
+    // timestamp, and in front of an error it read as gibberish, as in
+    // "Updated connection failed — showing last known".
+    //
+    // Withheld access is the exception. It is repairable from the full message
+    // and nowhere else, since a footer line has no room for a button, so stale
+    // numbers are not worth hiding the one available fix behind.
+    if (code !== 'NO_ACCESS' && keepVisible && content.querySelector('.cards')) {
+      footerText.textContent = `${explained.title} — showing last known data`;
+      footerText.title = explained.desc || '';
     } else {
-      showState(describeError(code, err?.detail || err?.message));
+      showState(explained);
     }
   } finally {
     inFlight = false;
