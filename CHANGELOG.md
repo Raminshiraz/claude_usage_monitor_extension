@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.1.2
+
+The "Connection failed" that came back on every browser restart, and cleared
+only after claude.ai was opened in a tab, was never a network fault. Chrome
+exempts an extension's requests from CORS only while the host permission is
+actually held, and declaring it in the manifest is not the same as holding it:
+with site access narrowed to "on click", every call to claude.ai is treated as
+an ordinary cross-origin request from `chrome-extension://…`, preflighted, and
+refused for want of an `Access-Control-Allow-Origin` header. The request never
+left the browser. Opening the site in a tab is what granted the access back.
+
+`fetch` reports all of that as `Failed to fetch` — the same string it uses for
+an unplugged cable — which is why it read as a connection problem and sent
+people to check the one thing that was working.
+
+### Fixed
+
+- **Withheld site access is identified and repairable.** A transport failure now rules out the host permission before blaming anything else, since nothing can succeed without it, and says "Site access is switched off" with a button that asks for it back
+- Granting the permission refreshes immediately, by either route — the button, or Site access in `chrome://extensions`, which the popup never hears about. Granting it is the exact event that unblocks the requests, so there is nothing left to wait for and the badge no longer stays wrong until the next alarm
+- **A failure during backoff with nothing cached was always reported as "Connection failed"**, whatever had actually gone wrong, so a withheld permission or an expired login spent the entire backoff window mislabelled and pointing at the wrong fix. The real failure is remembered and reported
+- The footer read "Updated connection failed — showing last known", which is a timestamp prefix fused onto an error message. A failed revalidation now reads "Connection failed — showing last known data"
+
+### Changed
+
+- `content-type: application/json` is no longer sent on GETs. A GET has no body to describe and the header is not on the CORS safelist, so it escalated every request into a preflighted one for nothing
+- The origin probe added in 3.1.1 is gone. It was meant to tell a dead connection from a refused request, but a CORS refusal blocks the probe in exactly the same way, so it answered "origin unreachable" for an origin it had never actually asked
+
 ## 3.1.1
 
 Everything that was supposed to keep this extension from hammering claude.ai

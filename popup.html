@@ -227,6 +227,22 @@
   .state-msg .desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
   .state-msg a { color: var(--accent); text-decoration: none; }
   .state-msg a:hover { text-decoration: underline; }
+  /* The one failure the popup can repair by itself, so it gets a real button
+     rather than instructions to go elsewhere. */
+  .state-msg .state-action {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .state-msg .state-action:hover { background: var(--accent-light); }
+  .state-msg .state-action:disabled { opacity: 0.6; cursor: default; }
 
   .footer {
     display: flex;

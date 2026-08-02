@@ -91,6 +91,18 @@ Whole amounts drop the cents — `$50`, not `$50.00` — while anything with a f
 | `notifications` | Alert you when a limit passes 80% or 95% |
 | `host_permissions` (`claude.ai`) | Fetch usage data from the claude.ai API |
 
+Site access has to stay on **On all sites** (or at least claude.ai). Chrome exempts an extension's requests from CORS only while that permission is actually held — narrowed to "on click", every request is refused before it leaves the browser. See below.
+
+## Troubleshooting
+
+**"Site access is switched off"** — Chrome is withholding the claude.ai host permission, so requests are refused inside the browser and never reach the network. Use the button in the popup, or open `chrome://extensions`, find Claude Usage Monitor, and set **Site access** to **On all sites**. Usage reappears as soon as the permission is granted.
+
+**"Not logged in"** — log in to claude.ai in the same browser profile and refresh.
+
+**"Request was challenged"** — claude.ai bounced the request rather than answering. Open claude.ai in a tab, then refresh.
+
+**The badge is stuck on `!`** — the last refresh failed. Open the popup to see why. The exact reason is also logged by the worker, at `chrome://extensions` → the extension → **service worker**.
+
 ## Privacy
 
 - All data stays local in your browser
