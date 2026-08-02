@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.2.0
+## 3.1.1
 
 Everything that was supposed to keep this extension from hammering claude.ai
 was held in a variable inside the service worker. Chrome shuts an idle worker
@@ -20,6 +20,7 @@ ever read it. None of it had been working.
 
 - Only the usage request retries a dropped connection. Retrying all three doubled the traffic during exactly the outage that caused it
 - `429` and `503` are recognised, and the `Retry-After` the server sends is honoured over the extension's own backoff
+- A transport failure now probes the origin for a static file before it is logged. `fetch` reports DNS not being up, a connection that cannot be established, and an edge refusing one particular request all as the same bare "Failed to fetch", and telling those apart is the difference between a fault worth fixing here and one that is not
 
 ## 3.1.0
 
