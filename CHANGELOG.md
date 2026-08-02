@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.2.0
+
+Everything that was supposed to keep this extension from hammering claude.ai
+was held in a variable inside the service worker. Chrome shuts an idle worker
+down after about thirty seconds, so all of it was reset before the next alarm
+ever read it. None of it had been working.
+
+### Fixed
+
+- **The backoff never engaged.** The failure counter and the deadline it sets lived in worker memory, which is discarded between alarms, so every tick started again from zero failures and went straight out to the network. A browser that came up before its network did was answered with a full-rate stream of failing requests until something recovered. Both now live in session storage, which outlives the worker and is cleared on browser restart
+- **The five-minute credit cache never applied either**, for the same reason, so the balance was refetched on every single tick — the doubled traffic 3.1.0 set out to remove. It is now cached in local storage
+- **A failed credit lookup was not remembered at all.** Accounts with no prepaid credit 404 there, and an uncached failure comes straight back on the next refresh, so the endpoint most likely to fail was the one being called most often, forever. Failures are cached too: a 404 for a day, since it means this account has no prepaid credit, and a blip for a minute
+- **A Cloudflare challenge was reported as "Not logged in"**, sending people off to re-authenticate a session that was fine. Challenged requests are now identified by their `cf-mitigated` header or HTML body and say what actually clears them, which is loading claude.ai itself
+- **Every dropped connection produced the same bare "Connection failed"** — the underlying reason was thrown away at the point of failure, leaving nothing to diagnose from. It is now kept on the error and logged by the worker
+- With auto-refresh switched off there was no periodic alarm, so a failed refresh left the badge showing an error until the popup was next opened by hand. A failure now books its own retry
+
+### Changed
+
+- Only the usage request retries a dropped connection. Retrying all three doubled the traffic during exactly the outage that caused it
+- `429` and `503` are recognised, and the `Retry-After` the server sends is honoured over the extension's own backoff
+
 ## 3.1.0
 
 ### Changed

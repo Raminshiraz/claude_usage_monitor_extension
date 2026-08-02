@@ -5,12 +5,20 @@ import {
   getStatus,
   formatCountdown,
   describeError,
+  storageGet,
+  storageSet,
   BADGE_LIMIT_KEY,
   normaliseRefreshSeconds,
   UsageError
 } from './lib/usage.js';
 
 const REFRESH_ALARM = 'refresh-usage';
+
+// Auto-refresh can be switched off entirely, and a browser that has only just
+// started tends to fail its first attempt before the network is up. Without a
+// retry of its own that leaves the badge stuck on an error until the popup is
+// opened by hand, so a failure always books its own next attempt.
+const RETRY_ALARM = 'retry-usage';
 
 // Chrome will not fire an alarm more often than every 30 seconds, so anything
 // quicker than that only applies while the popup is open and driving it.
@@ -111,8 +119,13 @@ async function runRefresh() {
     return { ok: true, limits, extra, fetchedAt };
   } catch (err) {
     const code = err instanceof UsageError ? err.code : 'UNKNOWN';
+    const detail = err?.detail || err?.message || '';
     await paintProblem(code);
-    return { ok: false, code, detail: err?.detail || err?.message || '' };
+    // The popup only ever shows the friendly wording, so this is the one place
+    // the actual reason a request died is recoverable. Inspect it from
+    // chrome://extensions -> the extension -> "service worker".
+    console.warn(`[usage] refresh failed: ${code}${detail ? ` — ${detail}` : ''}`);
+    return { ok: false, code, detail, retryAfterMs: err?.retryAfterMs ?? null };
   }
 }
 
@@ -120,20 +133,49 @@ async function runRefresh() {
 let pending = null;
 
 // Repeated failures back off instead of retrying at the refresh interval,
-// which on a 5 second setting would be a lot of pointless requests.
+// which during an outage would be a lot of pointless requests.
+//
+// This state has to survive the worker, not just live in it. Chrome shuts an
+// idle service worker down after about thirty seconds, so a counter held in a
+// module variable was reset before the next alarm ever read it — the backoff
+// existed but never once engaged, and a browser that came up before its network
+// did was answered with a full-rate stream of failing requests for as long as
+// it took to recover. Session storage is the right home: it outlives the worker
+// and is cleared when the browser restarts, which is exactly when a fresh start
+// is wanted.
 const BACKOFF_BASE_MS = 5000;
 const BACKOFF_MAX_MS = 120000;
-let failures = 0;
-let backoffUntil = 0;
+const BACKOFF_KEY = 'refreshBackoff';
 
-function noteResult(ok) {
+async function readBackoff() {
+  return (await storageGet('session', BACKOFF_KEY)) || { failures: 0, until: 0 };
+}
+
+async function noteResult(ok, retryAfterMs) {
   if (ok) {
-    failures = 0;
-    backoffUntil = 0;
+    await storageSet('session', BACKOFF_KEY, { failures: 0, until: 0 });
+    await chrome.alarms.clear(RETRY_ALARM);
     return;
   }
-  failures += 1;
-  backoffUntil = Date.now() + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (failures - 1));
+
+  const { failures } = await readBackoff();
+  const next = failures + 1;
+  // A server that told us how long to wait outranks our own guess.
+  const wait = Number.isFinite(retryAfterMs)
+    ? Math.min(BACKOFF_MAX_MS, Math.max(BACKOFF_BASE_MS, retryAfterMs))
+    : Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (next - 1));
+
+  const until = Date.now() + wait;
+  await storageSet('session', BACKOFF_KEY, { failures: next, until });
+  await scheduleRetry(until);
+}
+
+// Chrome will not fire an alarm sooner than 30 seconds, so a short backoff just
+// gets the earliest slot going.
+async function scheduleRetry(until) {
+  await chrome.alarms.create(RETRY_ALARM, {
+    delayInMinutes: Math.max(MIN_ALARM_MINUTES, (until - Date.now()) / 60000)
+  });
 }
 
 // While backing off, hand back the last good reading rather than an error, so
@@ -146,13 +188,16 @@ async function cachedResult() {
   return { ok: false, code: 'NETWORK', detail: '' };
 }
 
-function refresh({ force = false } = {}) {
-  if (!force && Date.now() < backoffUntil) return cachedResult();
+async function refresh({ force = false } = {}) {
+  if (!force) {
+    const { until } = await readBackoff();
+    if (Date.now() < until) return cachedResult();
+  }
 
   if (!pending) {
     pending = runRefresh()
-      .then((result) => {
-        noteResult(result.ok);
+      .then(async (result) => {
+        await noteResult(result.ok, result.retryAfterMs);
         return result;
       })
       .finally(() => {
@@ -185,7 +230,7 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === REFRESH_ALARM) refresh();
+  if (alarm.name === REFRESH_ALARM || alarm.name === RETRY_ALARM) refresh();
 });
 
 // Re-arm as soon as the interval is changed in the popup.
