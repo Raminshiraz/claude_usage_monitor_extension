@@ -240,13 +240,16 @@ function buildExtraCard(extra) {
 
   card.append(buildTrack(extra.utilization, 'Spend against your monthly limit'));
 
-  // The remainder here is headroom under the monthly limit — deliberately not
-  // called a balance, which is a different and usually larger number.
-  const parts = [
-    `${formatUsd(extra.usedCents)} spent of ${formatUsd(extra.totalCents)} monthly limit`
-  ];
-  if (extra.remainingCents != null) parts.push(`${formatUsd(extra.remainingCents)} left`);
-  card.append(el('div', 'card-note', parts.join(' • ')));
+  // Headroom under the limit is left out on purpose: it reads like a balance
+  // without being one, and the bar plus the percentage in the header already
+  // say how much of the limit is gone.
+  card.append(
+    el(
+      'div',
+      'card-note',
+      `${formatUsd(extra.usedCents)} spent of ${formatUsd(extra.totalCents)} monthly limit`
+    )
+  );
 
   if (extra.limitReached) card.append(el('div', 'card-warn', 'Monthly spend limit reached'));
   if (extra.balanceCents != null) card.append(buildBalance(extra));
