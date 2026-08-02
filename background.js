@@ -5,6 +5,7 @@ import {
   getStatus,
   formatCountdown,
   describeError,
+  probeOrigin,
   storageGet,
   storageSet,
   BADGE_LIMIT_KEY,
@@ -121,10 +122,15 @@ async function runRefresh() {
     const code = err instanceof UsageError ? err.code : 'UNKNOWN';
     const detail = err?.detail || err?.message || '';
     await paintProblem(code);
+
+    // A transport failure says nothing about itself, so ask the origin directly
+    // whether it is reachable at all before writing the failure down.
+    const probe = code === 'NETWORK' ? ` — probe: ${await probeOrigin()}` : '';
+
     // The popup only ever shows the friendly wording, so this is the one place
     // the actual reason a request died is recoverable. Inspect it from
     // chrome://extensions -> the extension -> "service worker".
-    console.warn(`[usage] refresh failed: ${code}${detail ? ` — ${detail}` : ''}`);
+    console.warn(`[usage] refresh failed: ${code}${detail ? ` — ${detail}` : ''}${probe}`);
     return { ok: false, code, detail, retryAfterMs: err?.retryAfterMs ?? null };
   }
 }
