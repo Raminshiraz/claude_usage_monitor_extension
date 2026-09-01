@@ -81,6 +81,38 @@ test('toLimits renders unknown buckets after known ones with a derived label', (
   assert.equal(limits[1].label, 'Thirty Day Haiku');
 });
 
+test('an unnamed bucket reporting no usage is not rendered', () => {
+  // The API ships codenamed buckets for unannounced models and promotions.
+  // Enrolled accounts get a live one sitting at zero, which used to appear as
+  // a card called "Nimbus Quill" that meant nothing and never moved.
+  const limits = toLimits({
+    five_hour: { utilization: 20 },
+    nimbus_quill: { utilization: 0, resets_at: '2026-09-01T00:00:00Z' }
+  });
+  assert.deepEqual(
+    limits.map((l) => l.key),
+    ['five_hour']
+  );
+});
+
+test('an unnamed bucket appears once it carries usage', () => {
+  const limits = toLimits({ five_hour: { utilization: 20 }, nimbus_quill: { utilization: 3 } });
+  assert.deepEqual(
+    limits.map((l) => l.key),
+    ['five_hour', 'nimbus_quill']
+  );
+  assert.equal(limits[1].label, 'Nimbus Quill');
+});
+
+test('a known bucket at zero is still a reading worth showing', () => {
+  // Unlike a codename, "Weekly Opus at 0%" is a limit you know you have.
+  const limits = toLimits({ five_hour: { utilization: 20 }, seven_day_opus: { utilization: 0 } });
+  assert.deepEqual(
+    limits.map((l) => l.key),
+    ['five_hour', 'seven_day_opus']
+  );
+});
+
 test('toLimits drops entries without a usable number', () => {
   const limits = toLimits({
     five_hour: { utilization: 42 },
