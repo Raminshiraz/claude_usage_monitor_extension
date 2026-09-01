@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { toExtraCredit, toLimits, formatUsd, toCreditBalance } from '../lib/usage.js';
+import {
+  toExtraCredit,
+  toLimits,
+  formatUsd,
+  toCreditBalance,
+  hasSpendableCredit
+} from '../lib/usage.js';
 
 // Trimmed from a real response. Note spend.balance: the field exists but the
 // endpoint leaves it null, and the unused buckets come back as null too.
@@ -100,6 +106,17 @@ test('a balance with no promotional credit reports none', () => {
   const credit = toCreditBalance({ amount: 2500, promo_tranches: [], tranches: [] });
   assert.equal(credit.balanceCents, 2500);
   assert.equal(credit.promoCents, null);
+});
+
+test('an empty balance is not worth a line', () => {
+  // An account that has never bought credit reads $0 forever. The parser still
+  // reports the zero faithfully; it just is not something to show.
+  const credit = toCreditBalance({ amount: 0, promo_tranches: [] });
+  assert.equal(credit.balanceCents, 0);
+  assert.equal(hasSpendableCredit(credit), false);
+  assert.equal(hasSpendableCredit(toCreditBalance(REAL_CREDITS)), true);
+  assert.equal(hasSpendableCredit(null), false);
+  assert.equal(hasSpendableCredit({ balanceCents: null }), false);
 });
 
 test('toCreditBalance tolerates junk', () => {

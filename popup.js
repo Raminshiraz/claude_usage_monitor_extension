@@ -8,6 +8,7 @@ import {
   formatUsd,
   formatDate,
   describeError,
+  hasSpendableCredit,
   CLAUDE_ORIGIN_PATTERN,
   REFRESH_OPTIONS,
   normaliseRefreshSeconds,
@@ -252,13 +253,17 @@ function buildExtraCard(extra) {
   );
 
   if (extra.limitReached) card.append(el('div', 'card-warn', 'Monthly spend limit reached'));
-  if (extra.balanceCents != null) card.append(buildBalance(extra));
+  if (hasSpendableCredit(extra)) card.append(buildBalance(extra));
 
   return card;
 }
 
 function renderUsage(limits, extra) {
-  if (!limits.length && !extra) {
+  // No spend against a limit and no money in hand leaves nothing to put on the
+  // credit card, so it is not built at all rather than built to say "$0".
+  const showExtra = Boolean(extra) && (extra.utilization != null || hasSpendableCredit(extra));
+
+  if (!limits.length && !showExtra) {
     showState(describeError('NO_LIMITS'));
     return;
   }
@@ -266,7 +271,7 @@ function renderUsage(limits, extra) {
   const sinks = [];
   const cards = el('div', 'cards');
   for (const limit of limits) cards.append(buildCard(limit, sinks));
-  if (extra) cards.append(buildExtraCard(extra));
+  if (showExtra) cards.append(buildExtraCard(extra));
 
   replaceContent(cards);
 
