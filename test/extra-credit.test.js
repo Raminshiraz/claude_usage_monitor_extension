@@ -6,7 +6,9 @@ import {
   toLimits,
   formatUsd,
   toCreditBalance,
-  hasSpendableCredit
+  hasSpendableCredit,
+  spendCeiling,
+  getStatus
 } from '../lib/usage.js';
 
 // Trimmed from a real response. Note spend.balance: the field exists but the
@@ -186,6 +188,47 @@ test('null buckets do not become limit cards', () => {
       .map((limit) => limit.key),
     ['five_hour', 'seven_day']
   );
+});
+
+test('the credit you hold binds when it runs out before the monthly limit', () => {
+  // The reported case: $48.69 spent, an $80 limit, $12.31 of credit left. The
+  // account stops at $61, not $80, and is four fifths of the way there.
+  const ceiling = spendCeiling({ usedCents: 4869, totalCents: 8000, balanceCents: 1231 });
+  assert.equal(ceiling.boundByCredit, true);
+  assert.equal(ceiling.ceilingCents, 6100);
+  assert.equal(ceiling.limitCents, 8000);
+  assert.equal(Math.round(ceiling.utilization), 80);
+  // Against the unreachable limit it read 61%, and calm rather than close.
+  assert.equal(Math.round((4869 / 8000) * 100), 61);
+  assert.equal(getStatus(ceiling.utilization), 'high');
+  assert.equal(getStatus(60.9), 'mid');
+});
+
+test('the monthly limit binds when the credit covers it', () => {
+  // The usual way round, so the card is unchanged for most accounts.
+  const ceiling = spendCeiling({ usedCents: 64, totalCents: 5000, balanceCents: 6036 });
+  assert.equal(ceiling.boundByCredit, false);
+  assert.equal(ceiling.ceilingCents, 5000);
+  assert.equal(Math.round(ceiling.utilization), 1);
+});
+
+test('with no balance known the limit is the only ceiling there is', () => {
+  const ceiling = spendCeiling(toExtraCredit(REAL_PAYLOAD));
+  assert.equal(ceiling.boundByCredit, false);
+  assert.equal(ceiling.ceilingCents, 5000);
+  assert.equal(ceiling.utilization, toExtraCredit(REAL_PAYLOAD).utilization);
+});
+
+test('credit exactly covering the limit does not take it over', () => {
+  const ceiling = spendCeiling({ usedCents: 2000, totalCents: 5000, balanceCents: 3000 });
+  assert.equal(ceiling.boundByCredit, false);
+  assert.equal(ceiling.ceilingCents, 5000);
+});
+
+test('spendCeiling has nothing to measure without spend', () => {
+  assert.equal(spendCeiling(null), null);
+  assert.equal(spendCeiling({ balanceCents: 1231 }), null);
+  assert.equal(spendCeiling({ usedCents: 100, totalCents: 0 }), null);
 });
 
 test('a non-cent exponent still converts correctly', () => {

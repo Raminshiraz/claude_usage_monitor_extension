@@ -9,6 +9,7 @@ import {
   formatDate,
   describeError,
   hasSpendableCredit,
+  spendCeiling,
   CLAUDE_ORIGIN_PATTERN,
   REFRESH_OPTIONS,
   normaliseRefreshSeconds,
@@ -218,8 +219,11 @@ function buildBalance(extra) {
 }
 
 function buildExtraCard(extra) {
-  const hasBar = extra.utilization != null;
-  const status = hasBar ? getStatus(extra.utilization) : 'low';
+  // Measured against whichever of the monthly limit and the credit balance
+  // actually runs out first, so the percentage always answers "how close am I
+  // to being stopped" rather than "how much of a ceiling I may never reach".
+  const ceiling = spendCeiling(extra);
+  const status = ceiling ? getStatus(ceiling.utilization) : 'low';
   const card = el('div', `card card-extra status-${status}`);
 
   const header = el('div', 'card-header');
@@ -228,29 +232,49 @@ function buildExtraCard(extra) {
     el(
       'span',
       'card-value',
-      hasBar ? `${Math.round(extra.utilization)}% used` : formatUsd(extra.balanceCents)
+      ceiling ? `${Math.round(ceiling.utilization)}% used` : formatUsd(extra.balanceCents)
     )
   );
   card.append(header);
 
-  if (!hasBar) {
+  if (!ceiling) {
     card.append(el('div', 'card-note', 'Current balance'));
     if (extra.promoCents != null) card.append(el('div', 'card-note', promoNote(extra)));
     return card;
   }
 
-  card.append(buildTrack(extra.utilization, 'Spend against your monthly limit'));
+  card.append(
+    buildTrack(
+      ceiling.utilization,
+      ceiling.boundByCredit ? 'Spend against the credit you hold' : 'Spend against your monthly limit'
+    )
+  );
 
   // Headroom under the limit is left out on purpose: it reads like a balance
   // without being one, and the bar plus the percentage in the header already
-  // say how much of the limit is gone.
+  // say how much of the ceiling is gone.
   card.append(
     el(
       'div',
       'card-note',
-      `${formatUsd(extra.usedCents)} spent of ${formatUsd(extra.totalCents)} monthly limit`
+      `${formatUsd(extra.usedCents)} spent of ${formatUsd(ceiling.ceilingCents)}${
+        ceiling.boundByCredit ? ' available' : ' monthly limit'
+      }`
     )
   );
+
+  // Without this the percentage would quietly change meaning: the limit is
+  // still the number you configured, and it needs saying that it is not the
+  // one being measured.
+  if (ceiling.boundByCredit) {
+    card.append(
+      el(
+        'div',
+        'card-note',
+        `Your ${formatUsd(ceiling.limitCents)} monthly limit is above the credit you hold`
+      )
+    );
+  }
 
   if (extra.limitReached) card.append(el('div', 'card-warn', 'Monthly spend limit reached'));
   if (hasSpendableCredit(extra)) card.append(buildBalance(extra));
