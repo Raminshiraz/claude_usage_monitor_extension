@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.3
+
+Three things on the card were taking up space without answering anything: a
+limit named after a model that has not been announced, a balance of nothing,
+and a percentage measured against a ceiling the account cannot reach.
+
+### Fixed
+
+- **A codenamed bucket appeared as a card and never moved again.** The usage API ships buckets for models and promotions before they are announced — `tangelo`, `omelette_promotional`, `nimbus_quill` — normally as null, which was dropped, but an account enrolled in one gets a live entry sitting at zero instead. That rendered as a card named after something the reader has never heard of, reporting no usage, permanent and impossible to dismiss. An unrecognised bucket now has to carry usage to appear at all. A bucket we can name still shows at 0%, because a quiet weekly limit is a real reading about a limit you know you have
+- **A credit balance of $0 was reported as though it were news.** Every account that has never bought prepaid credit holds exactly $0 and always will, so the line never changed and never said anything. With no monthly spend limit either, that empty line was the entire card: "Usage Credits — $0 — Current balance", forever
+- **Spend was measured against the monthly limit even when the credit ran out first.** The limit is a ceiling you set; the balance is the money that pays for the spend underneath it, and the two are set independently. With $48.69 spent, an $80 limit and $12.31 of credit left, the card read "61% used" in a calm colour and offered a ceiling the account stops $19 short of — while it was in fact four fifths of the way to a stop, and the two figures on the card implied different amounts of headroom. The bar, the percentage and its colour now follow whichever of the two runs out first, the note names that ceiling, and a second line says the monthly limit is above the credit when it is no longer what sets the pace. Where the balance comfortably covers the limit, which is the usual way round, nothing changes
+
 ## 3.1.2
 
 The "Connection failed" that came back on every browser restart, and cleared
