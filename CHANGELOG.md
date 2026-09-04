@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.4
+
+The countdown said how long was left but never when it ends, so anyone
+planning around a reset had to do the arithmetic themselves.
+
+### Changed
+
+- **The reset line leads with the time the reset happens.** "Resets in 2h 22m" now reads "Resets at 10:34 PM (2h 22m)": the wall-clock time first, the countdown kept in brackets for the glance. A limit a day or more out names the day it lands on — "Resets on Sun 10:34 PM (3 days)" — since the time alone would not say which one. Under a day it drops the weekday and matches the session line exactly, so the two read the same way when they mean the same thing. The clock follows the reader's locale, so a 24-hour clock stays a 24-hour clock, and the hover tooltip still carries the full date
+
 ## 3.1.3
 
 Three things on the card were taking up space without answering anything: a
