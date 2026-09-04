@@ -190,7 +190,7 @@ function buildCard(limit, countdownSinks) {
     info.append(icon, text);
 
     const exact = formatResetTime(limit.resetsAt);
-    if (exact) info.title = `Resets at ${exact}`;
+    if (exact) info.title = `Resets ${exact}`;
 
     card.append(info);
     countdownSinks.push({ resetsAt: limit.resetsAt, node: text });

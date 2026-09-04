@@ -158,14 +158,28 @@ test('getStatus maps each threshold band', () => {
   assert.equal(getStatus(120), 'crit');
 });
 
-test('formatCountdown picks the coarsest useful unit', () => {
+test('formatCountdown leads with the reset time', () => {
   const now = Date.parse('2026-08-01T00:00:00Z');
   const at = (ms) => formatCountdown(new Date(now + ms).toISOString(), now);
+  // Locale-agnostic: the clock face is whatever the runtime renders, the
+  // wrapping is what this test pins down.
+  const clock = (ms, withWeekday) =>
+    new Date(now + ms).toLocaleString(undefined, {
+      ...(withWeekday ? { weekday: 'short' } : {}),
+      hour: 'numeric',
+      minute: '2-digit'
+    });
 
-  assert.equal(at(3 * 86400000 + 4 * 3600000), 'Resets in 3d 4h');
-  assert.equal(at(5 * 3600000 + 30 * 60000), 'Resets in 5h 30m');
-  assert.equal(at(12 * 60000), 'Resets in 12m');
-  assert.equal(at(30000), 'Resets in under a minute');
+  const week = 3 * 86400000 + 4 * 3600000;
+  assert.equal(at(week), `Resets on ${clock(week, true)} (3 days)`);
+
+  const tomorrow = 86400000 + 60000;
+  assert.equal(at(tomorrow), `Resets on ${clock(tomorrow, true)} (1 day)`);
+
+  const session = 5 * 3600000 + 30 * 60000;
+  assert.equal(at(session), `Resets at ${clock(session)} (5h 30m)`);
+  assert.equal(at(12 * 60000), `Resets at ${clock(12 * 60000)} (12m)`);
+  assert.equal(at(30000), `Resets at ${clock(30000)} (under a minute)`);
 });
 
 test('formatCountdown handles elapsed and missing timestamps', () => {
